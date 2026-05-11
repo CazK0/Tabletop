@@ -1,5 +1,6 @@
-from typing import Optional
 from sqlmodel import Field, SQLModel
+from pydantic import BaseModel, Field
+from typing import Optional, List
 
 class Character(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -18,3 +19,15 @@ class Item(SQLModel, table=True):
     description: str
     weight: float = Field(default=1.0)
     item_type: str = Field(index=True)
+
+
+class Character(BaseModel):
+    id: Optional[int] = None
+    name: str
+    level: int = 1
+    current_hp: int
+    max_hp: int
+    strength: int
+    dexterity: int
+    inventory: List[str] = Field(default_factory=list)
+    is_alive: bool = True
