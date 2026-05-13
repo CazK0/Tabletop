@@ -1,0 +1,25 @@
+from langchain_ollama import OllamaLLM
+from langchain_core.prompts import PromptTemplate
+from pydantic import BaseModel
+
+class NarrationRequest(BaseModel):
+    context: str
+
+class DungeonMaster:
+    def __init__(self):
+        self.llm = OllamaLLM(model="llama3")
+        self.template = PromptTemplate(
+            input_variables=["combat_context"],
+            template=(
+                "You are an expert Dungeon Master. Narrate the following combat "
+                "event in 2-3 vivid sentences. Do not use numbers.\n\n"
+                "Context: {combat_context}\n\n"
+                "Narration:"
+            )
+        )
+        self.chain = self.template | self.llm
+
+    def generate_combat_narration(self, context_string: str) -> str:
+        return self.chain.invoke({"combat_context": context_string})
+
+dm_instance = DungeonMaster()

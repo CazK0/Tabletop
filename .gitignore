@@ -5,3 +5,10 @@ __pycache__/
 venv/
 node_modules/
 .next/
+*.py[cod]
+*$py.class
+.venv/
+env/
+*.db
+*.sqlite3
+.DS_Store

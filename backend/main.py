@@ -2,25 +2,41 @@ from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from db.connection import init_db
 from db.models import Character
-from game_logic.combat import CombatEngine, AttackResult
 from pydantic import BaseModel
 import aiosqlite
 import json
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from game_logic import CombatEngine, AttackResult
+from ai_engine import dm_instance, NarrationRequest
 
-
-class AttackRequest(BaseModel):
-    attacker_id: int
-    defender_id: int
-
+from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from db.connection import init_db
+from db.models import Character
+from pydantic import BaseModel
+import aiosqlite
+import json
+from fastapi.middleware.cors import CORSMiddleware
+from game_logic import CombatEngine, AttackResult
+from ai_engine import dm_instance, NarrationRequest
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     yield
-
-
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+class AttackRequest(BaseModel):
+    attacker_id: int
+    defender_id: int
 
 @app.post("/characters/")
 async def create_character(character: Character):
@@ -77,3 +93,8 @@ async def execute_combat_turn(request: AttackRequest):
         await db.commit()
 
         return result
+
+@app.post("/combat/narrate")
+async def narrate_combat(request: NarrationRequest):
+    story = dm_instance.generate_combat_narration(request.context)
+    return {"narration": story.strip()}
