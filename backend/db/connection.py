@@ -1,33 +1,19 @@
-import asyncpg
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
+import aiosqlite
 
 async def init_db():
-    conn = await asyncpg.connect(
-        user='postgres',
-        password=os.getenv('POSTGRES_PASSWORD'),
-        database='rpg_world',
-        host='localhost',
-        port=5432
-    )
-
-    await conn.execute('''
-                       CREATE TABLE IF NOT EXISTS characters
-                       (
-                           id SERIAL PRIMARY KEY, 
-                           name VARCHAR(255) NOT NULL,
-                           level INT DEFAULT 1,
-                           current_hp INT NOT NULL,
-                           max_hp INT NOT NULL,
-                           strength INT NOT NULL,
-                           dexterity INT NOT NULL,
-                           inventory TEXT[],
-                           is_alive BOOLEAN DEFAULT TRUE
-                           );
-                       ''')
-
-    print("Database connection successful. 'characters' table ready.")
-    await conn.close()
+    async with aiosqlite.connect('rpg_world.db') as db:
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS characters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                level INTEGER DEFAULT 1,
+                current_hp INTEGER NOT NULL,
+                max_hp INTEGER NOT NULL,
+                strength INTEGER NOT NULL,
+                dexterity INTEGER NOT NULL,
+                inventory TEXT,
+                is_alive BOOLEAN DEFAULT 1
+            );
+        ''')
+        await db.commit()
+        print("Database connection successful. 'characters' table ready.")
