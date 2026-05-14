@@ -58,17 +58,11 @@ async def create_character(character: Character):
 
 @app.get("/characters/")
 async def get_characters():
-    async with aiosqlite.connect('rpg_world.db') as db:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute("SELECT * FROM characters")
         rows = await cursor.fetchall()
-        characters = []
-        for row in rows:
-            d = dict(row)
-            d['inventory'] = json.loads(d['inventory']) if d['inventory'] else []
-            characters.append(Character(**d))
-
-        return characters
+        return [_character_from_row(row) for row in rows]
 
 
 @app.post("/combat/attack", response_model=AttackResult)
@@ -104,5 +98,9 @@ async def execute_combat_turn(request: AttackRequest):
 
 @app.post("/combat/narrate")
 async def narrate_combat(request: NarrationRequest):
-    story = get_dm().generate_combat_narration(request.context)
-    return {"narration": story.strip()}
+    try:
+        raw = get_dm().generate_combat_narration(request.context)
+        text = raw.strip() if isinstance(raw, str) else str(raw).strip()
+        return {"narration": text}
+    except Exception:
+        return {"narration": request.context.strip()}

@@ -27,7 +27,6 @@ _dm: DungeonMaster | None = None
 
 
 def get_dm() -> DungeonMaster:
-    """Lazy singleton so importing the app does not hit Ollama until first use."""
     global _dm
     if _dm is None:
         _dm = DungeonMaster()
