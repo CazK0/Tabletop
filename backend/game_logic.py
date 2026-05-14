@@ -24,7 +24,7 @@ class CombatEngine:
 
     @staticmethod
     def calculate_ac(dexterity: int) -> int:
-        return 10 + (dexterity - 10) // 2
+        return 10 + CombatEngine.calculate_modifier(dexterity)
 
     @staticmethod
     def execute_attack(attacker: Character, defender: Character, weapon_die: int = 8) -> AttackResult:

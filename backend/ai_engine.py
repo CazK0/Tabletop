@@ -22,4 +22,13 @@ class DungeonMaster:
     def generate_combat_narration(self, context_string: str) -> str:
         return self.chain.invoke({"combat_context": context_string})
 
-dm_instance = DungeonMaster()
+
+_dm: DungeonMaster | None = None
+
+
+def get_dm() -> DungeonMaster:
+    """Lazy singleton so importing the app does not hit Ollama until first use."""
+    global _dm
+    if _dm is None:
+        _dm = DungeonMaster()
+    return _dm

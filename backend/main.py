@@ -1,25 +1,23 @@
-from fastapi import FastAPI, HTTPException
-from contextlib import asynccontextmanager
-from db.connection import init_db
-from db.models import Character
-from pydantic import BaseModel
-import aiosqlite
 import json
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from game_logic import CombatEngine, AttackResult
-from ai_engine import dm_instance, NarrationRequest
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from contextlib import asynccontextmanager
-from db.connection import init_db
-from db.models import Character
-from pydantic import BaseModel
 import aiosqlite
-import json
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from game_logic import CombatEngine, AttackResult
-from ai_engine import dm_instance, NarrationRequest
+from pydantic import BaseModel
+
+from ai_engine import NarrationRequest, get_dm
+from db.connection import DATABASE_PATH, init_db
+from db.models import Character
+from game_logic import AttackResult, CombatEngine
+
+
+def _character_from_row(row: aiosqlite.Row) -> Character:
+    data = dict(row)
+    raw = data.get("inventory")
+    data["inventory"] = json.loads(raw) if raw else []
+    return Character(**data)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,7 +38,7 @@ class AttackRequest(BaseModel):
 
 @app.post("/characters/")
 async def create_character(character: Character):
-    async with aiosqlite.connect('rpg_world.db') as db:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         inventory_json = json.dumps(character.inventory)
 
@@ -58,9 +56,24 @@ async def create_character(character: Character):
         return character
 
 
+@app.get("/characters/")
+async def get_characters():
+    async with aiosqlite.connect('rpg_world.db') as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM characters")
+        rows = await cursor.fetchall()
+        characters = []
+        for row in rows:
+            d = dict(row)
+            d['inventory'] = json.loads(d['inventory']) if d['inventory'] else []
+            characters.append(Character(**d))
+
+        return characters
+
+
 @app.post("/combat/attack", response_model=AttackResult)
 async def execute_combat_turn(request: AttackRequest):
-    async with aiosqlite.connect('rpg_world.db') as db:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
 
         cursor = await db.execute("SELECT * FROM characters WHERE id = ?", (request.attacker_id,))
@@ -72,13 +85,8 @@ async def execute_combat_turn(request: AttackRequest):
         if not attacker_row or not defender_row:
             raise HTTPException(status_code=404, detail="One or both characters not found.")
 
-        a_dict = dict(attacker_row)
-        a_dict['inventory'] = json.loads(a_dict['inventory']) if a_dict['inventory'] else []
-        attacker = Character(**a_dict)
-
-        d_dict = dict(defender_row)
-        d_dict['inventory'] = json.loads(d_dict['inventory']) if d_dict['inventory'] else []
-        defender = Character(**d_dict)
+        attacker = _character_from_row(attacker_row)
+        defender = _character_from_row(defender_row)
 
         if not attacker.is_alive or not defender.is_alive:
             raise HTTPException(status_code=400, detail="Cannot execute attack. Someone is already dead.")
@@ -96,5 +104,5 @@ async def execute_combat_turn(request: AttackRequest):
 
 @app.post("/combat/narrate")
 async def narrate_combat(request: NarrationRequest):
-    story = dm_instance.generate_combat_narration(request.context)
+    story = get_dm().generate_combat_narration(request.context)
     return {"narration": story.strip()}
