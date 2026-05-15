@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from ai_engine import NarrationRequest, get_dm
 from db.connection import DATABASE_PATH, init_db
 from db.models import Character
-from game_logic import AttackResult, CombatEngine
+from game_logic import AttackResult, CombatEngine, RoundResult
 
 
 def _character_from_row(row: aiosqlite.Row) -> Character:
@@ -35,6 +35,22 @@ app.add_middleware(
 class AttackRequest(BaseModel):
     attacker_id: int
     defender_id: int
+
+
+class RoundRequest(BaseModel):
+    hero_id: int = 1
+    monster_id: int = 2
+
+
+class ResetRequest(BaseModel):
+    character_ids: list[int] = [1, 2]
+
+
+async def _save_character(db: aiosqlite.Connection, character: Character) -> None:
+    await db.execute(
+        "UPDATE characters SET current_hp = ?, is_alive = ? WHERE id = ?",
+        (character.current_hp, character.is_alive, character.id),
+    )
 
 @app.post("/characters/")
 async def create_character(character: Character):
@@ -87,14 +103,63 @@ async def execute_combat_turn(request: AttackRequest):
 
         result = CombatEngine.execute_attack(attacker, defender)
 
-        await db.execute('''
-            UPDATE characters 
-            SET current_hp = ?, is_alive = ? 
-            WHERE id = ?
-        ''', (defender.current_hp, defender.is_alive, defender.id))
+        await _save_character(db, defender)
         await db.commit()
 
         return result
+
+
+@app.post("/combat/round", response_model=RoundResult)
+async def execute_combat_round(request: RoundRequest):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        cursor = await db.execute("SELECT * FROM characters WHERE id = ?", (request.hero_id,))
+        hero_row = await cursor.fetchone()
+
+        cursor = await db.execute("SELECT * FROM characters WHERE id = ?", (request.monster_id,))
+        monster_row = await cursor.fetchone()
+
+        if not hero_row or not monster_row:
+            raise HTTPException(status_code=404, detail="One or both characters not found.")
+
+        hero = _character_from_row(hero_row)
+        monster = _character_from_row(monster_row)
+
+        if not hero.is_alive or not monster.is_alive:
+            raise HTTPException(
+                status_code=400,
+                detail="Fight is over. Reset the arena to fight again.",
+            )
+
+        result = CombatEngine.execute_round(hero, monster)
+
+        await _save_character(db, hero)
+        await _save_character(db, monster)
+        await db.commit()
+
+        return result
+
+
+@app.post("/combat/reset")
+async def reset_combat(request: ResetRequest):
+    if not request.character_ids:
+        raise HTTPException(status_code=400, detail="No characters to reset.")
+
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        placeholders = ",".join("?" * len(request.character_ids))
+        await db.execute(
+            f"""
+            UPDATE characters
+            SET current_hp = max_hp, is_alive = 1
+            WHERE id IN ({placeholders})
+            """,
+            request.character_ids,
+        )
+        await db.commit()
+
+    return {"reset": request.character_ids}
+
 
 @app.post("/combat/narrate")
 async def narrate_combat(request: NarrationRequest):

@@ -17,6 +17,14 @@ class AttackResult(BaseModel):
     ai_context_string: str
 
 
+class RoundResult(BaseModel):
+    hero_attack: AttackResult
+    monster_attack: AttackResult | None = None
+    fight_over: bool
+    winner_name: str | None = None
+    ai_context_string: str
+
+
 class CombatEngine:
     @staticmethod
     def calculate_modifier(stat: int) -> int:
@@ -55,4 +63,28 @@ class CombatEngine:
             is_hit=is_hit, is_critical=is_critical, damage_dealt=damage,
             defender_remaining_hp=defender.current_hp, is_fatal=is_fatal,
             ai_context_string=context
+        )
+
+    @staticmethod
+    def execute_round(hero: Character, monster: Character) -> RoundResult:
+        hero_attack = CombatEngine.execute_attack(hero, monster)
+        monster_attack = None
+        if monster.is_alive:
+            monster_attack = CombatEngine.execute_attack(monster, hero)
+        fight_over = not hero.is_alive or not monster.is_alive
+        winner_name = None
+        if fight_over:
+            if hero.is_alive:
+                winner_name = hero.name
+            elif monster.is_alive:
+                winner_name = monster.name
+        parts = [hero_attack.ai_context_string]
+        if monster_attack:
+            parts.append(monster_attack.ai_context_string)
+        return RoundResult(
+            hero_attack=hero_attack,
+            monster_attack=monster_attack,
+            fight_over=fight_over,
+            winner_name=winner_name,
+            ai_context_string=" ".join(parts),
         )
