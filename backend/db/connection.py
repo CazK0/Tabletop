@@ -7,10 +7,9 @@ DATABASE_PATH = Path(__file__).resolve().parent.parent / "rpg_world.db"
 
 
 async def _ensure_demo_characters(db: aiosqlite.Connection) -> None:
-    inv = json.dumps([])
     rows = [
-        (1, "Arthur", 1, 30, 30, 16, 14, inv, 1),
-        (2, "Gorgon", 1, 40, 40, 14, 12, inv, 1),
+        (1, "Arthur", 1, 30, 30, 16, 14, json.dumps(["Longsword"]), 1),
+        (2, "Gorgon", 1, 40, 40, 14, 12, json.dumps(["Club"]), 1),
     ]
     for r in rows:
         await db.execute(
@@ -20,6 +19,23 @@ async def _ensure_demo_characters(db: aiosqlite.Connection) -> None:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             r,
+        )
+
+
+async def _ensure_demo_inventories(db: aiosqlite.Connection) -> None:
+    patches = [
+        (1, json.dumps(["Longsword"])),
+        (2, json.dumps(["Club"])),
+    ]
+    empty = json.dumps([])
+    for char_id, inv in patches:
+        await db.execute(
+            """
+            UPDATE characters
+            SET inventory = ?
+            WHERE id = ? AND (inventory IS NULL OR inventory = ? OR inventory = '[]')
+            """,
+            (inv, char_id, empty),
         )
 
 
@@ -41,4 +57,5 @@ async def init_db():
             """
         )
         await _ensure_demo_characters(db)
+        await _ensure_demo_inventories(db)
         await db.commit()

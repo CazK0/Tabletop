@@ -2,6 +2,16 @@ import random
 from pydantic import BaseModel
 from db.models import Character
 
+WEAPON_DICE: dict[str, int] = {
+    "longsword": 10,
+    "greataxe": 12,
+    "shortsword": 6,
+    "dagger": 4,
+    "club": 6,
+    "mace": 6,
+    "spear": 8,
+}
+
 
 class AttackResult(BaseModel):
     attacker_name: str
@@ -14,6 +24,8 @@ class AttackResult(BaseModel):
     damage_dealt: int
     defender_remaining_hp: int
     is_fatal: bool
+    weapon_name: str
+    weapon_die: int
     ai_context_string: str
 
 
@@ -35,7 +47,16 @@ class CombatEngine:
         return 10 + CombatEngine.calculate_modifier(dexterity)
 
     @staticmethod
-    def execute_attack(attacker: Character, defender: Character, weapon_die: int = 8) -> AttackResult:
+    def resolve_weapon(inventory: list[str]) -> tuple[int, str]:
+        for item in inventory:
+            key = item.strip().lower()
+            if key in WEAPON_DICE:
+                return WEAPON_DICE[key], item
+        return 8, "Fists"
+
+    @staticmethod
+    def execute_attack(attacker: Character, defender: Character) -> AttackResult:
+        weapon_die, weapon_name = CombatEngine.resolve_weapon(attacker.inventory)
         d20_roll = random.randint(1, 20)
         str_mod = CombatEngine.calculate_modifier(attacker.strength)
         total_attack = d20_roll + str_mod
@@ -46,7 +67,8 @@ class CombatEngine:
         damage = 0
         if is_hit:
             damage_roll = random.randint(1, weapon_die)
-            if is_critical: damage_roll += random.randint(1, weapon_die)
+            if is_critical:
+                damage_roll += random.randint(1, weapon_die)
             damage = max(1, damage_roll + str_mod)
 
         defender.current_hp -= damage
@@ -55,14 +77,26 @@ class CombatEngine:
             defender.current_hp = 0
             defender.is_alive = False
 
-        context = f"{attacker.name} rolled {d20_roll} (+{str_mod}). {'Hit' if is_hit else 'Miss'}. Dealt {damage} damage."
+        hit_word = "Hit" if is_hit else "Miss"
+        context = (
+            f"{attacker.name} with {weapon_name} rolled {d20_roll} (+{str_mod}). "
+            f"{hit_word}. Dealt {damage} damage."
+        )
 
         return AttackResult(
-            attacker_name=attacker.name, defender_name=defender.name,
-            roll=d20_roll, modifier=str_mod, total_attack=total_attack,
-            is_hit=is_hit, is_critical=is_critical, damage_dealt=damage,
-            defender_remaining_hp=defender.current_hp, is_fatal=is_fatal,
-            ai_context_string=context
+            attacker_name=attacker.name,
+            defender_name=defender.name,
+            roll=d20_roll,
+            modifier=str_mod,
+            total_attack=total_attack,
+            is_hit=is_hit,
+            is_critical=is_critical,
+            damage_dealt=damage,
+            defender_remaining_hp=defender.current_hp,
+            is_fatal=is_fatal,
+            weapon_name=weapon_name,
+            weapon_die=weapon_die,
+            ai_context_string=context,
         )
 
     @staticmethod

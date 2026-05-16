@@ -38,8 +38,8 @@ class AttackRequest(BaseModel):
 
 
 class RoundRequest(BaseModel):
-    hero_id: int = 1
-    monster_id: int = 2
+    hero_id: int
+    monster_id: int
 
 
 class ResetRequest(BaseModel):
@@ -119,6 +119,9 @@ async def execute_combat_round(request: RoundRequest):
 
         cursor = await db.execute("SELECT * FROM characters WHERE id = ?", (request.monster_id,))
         monster_row = await cursor.fetchone()
+
+        if request.hero_id == request.monster_id:
+            raise HTTPException(status_code=400, detail="Choose two different fighters.")
 
         if not hero_row or not monster_row:
             raise HTTPException(status_code=404, detail="One or both characters not found.")
