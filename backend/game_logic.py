@@ -21,6 +21,7 @@ class AttackResult(BaseModel):
     total_attack: int
     is_hit: bool
     is_critical: bool
+    is_fumble: bool
     damage_dealt: int
     defender_remaining_hp: int
     is_fatal: bool
@@ -30,8 +31,11 @@ class AttackResult(BaseModel):
 
 
 class RoundResult(BaseModel):
-    hero_attack: AttackResult
+    hero_attack: AttackResult | None = None
     monster_attack: AttackResult | None = None
+    hero_initiative: int
+    monster_initiative: int
+    first_attacker_name: str
     fight_over: bool
     winner_name: str | None = None
     ai_context_string: str
@@ -55,6 +59,10 @@ class CombatEngine:
         return 8, "Fists"
 
     @staticmethod
+    def roll_initiative(character: Character) -> int:
+        return random.randint(1, 20) + CombatEngine.calculate_modifier(character.dexterity)
+
+    @staticmethod
     def execute_attack(attacker: Character, defender: Character) -> AttackResult:
         weapon_die, weapon_name = CombatEngine.resolve_weapon(attacker.inventory)
         d20_roll = random.randint(1, 20)
@@ -63,7 +71,11 @@ class CombatEngine:
         defender_ac = CombatEngine.calculate_ac(defender.dexterity)
 
         is_critical = d20_roll == 20
-        is_hit = is_critical or total_attack >= defender_ac
+        is_fumble = d20_roll == 1
+        is_hit = (
+            not is_fumble
+            and (is_critical or total_attack >= defender_ac)
+        )
         damage = 0
         if is_hit:
             damage_roll = random.randint(1, weapon_die)
@@ -77,7 +89,12 @@ class CombatEngine:
             defender.current_hp = 0
             defender.is_alive = False
 
-        hit_word = "Hit" if is_hit else "Miss"
+        if is_fumble:
+            hit_word = "Fumble"
+        elif is_hit:
+            hit_word = "Hit"
+        else:
+            hit_word = "Miss"
         context = (
             f"{attacker.name} with {weapon_name} rolled {d20_roll} (+{str_mod}). "
             f"{hit_word}. Dealt {damage} damage."
@@ -91,6 +108,7 @@ class CombatEngine:
             total_attack=total_attack,
             is_hit=is_hit,
             is_critical=is_critical,
+            is_fumble=is_fumble,
             damage_dealt=damage,
             defender_remaining_hp=defender.current_hp,
             is_fatal=is_fatal,
@@ -100,11 +118,39 @@ class CombatEngine:
         )
 
     @staticmethod
+    def _monster_attacks_first(hero: Character, monster: Character, hero_init: int, monster_init: int) -> bool:
+        if monster_init > hero_init:
+            return True
+        if monster_init < hero_init:
+            return False
+        return monster.dexterity > hero.dexterity
+
+    @staticmethod
     def execute_round(hero: Character, monster: Character) -> RoundResult:
-        hero_attack = CombatEngine.execute_attack(hero, monster)
-        monster_attack = None
-        if monster.is_alive:
+        hero_init = CombatEngine.roll_initiative(hero)
+        monster_init = CombatEngine.roll_initiative(monster)
+        monster_first = CombatEngine._monster_attacks_first(
+            hero, monster, hero_init, monster_init,
+        )
+        first_name = monster.name if monster_first else hero.name
+
+        hero_attack: AttackResult | None = None
+        monster_attack: AttackResult | None = None
+        context_parts: list[str] = []
+
+        if monster_first:
             monster_attack = CombatEngine.execute_attack(monster, hero)
+            context_parts.append(monster_attack.ai_context_string)
+            if hero.is_alive:
+                hero_attack = CombatEngine.execute_attack(hero, monster)
+                context_parts.append(hero_attack.ai_context_string)
+        else:
+            hero_attack = CombatEngine.execute_attack(hero, monster)
+            context_parts.append(hero_attack.ai_context_string)
+            if monster.is_alive:
+                monster_attack = CombatEngine.execute_attack(monster, hero)
+                context_parts.append(monster_attack.ai_context_string)
+
         fight_over = not hero.is_alive or not monster.is_alive
         winner_name = None
         if fight_over:
@@ -112,13 +158,14 @@ class CombatEngine:
                 winner_name = hero.name
             elif monster.is_alive:
                 winner_name = monster.name
-        parts = [hero_attack.ai_context_string]
-        if monster_attack:
-            parts.append(monster_attack.ai_context_string)
+
         return RoundResult(
             hero_attack=hero_attack,
             monster_attack=monster_attack,
+            hero_initiative=hero_init,
+            monster_initiative=monster_init,
+            first_attacker_name=first_name,
             fight_over=fight_over,
             winner_name=winner_name,
-            ai_context_string=" ".join(parts),
+            ai_context_string=" ".join(context_parts),
         )

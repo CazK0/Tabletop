@@ -2,6 +2,7 @@
 
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import CharacterCreator from './CharacterCreator';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -24,6 +25,7 @@ interface AttackResult {
   total_attack: number;
   is_hit: boolean;
   is_critical: boolean;
+  is_fumble: boolean;
   damage_dealt: number;
   defender_remaining_hp: number;
   is_fatal: boolean;
@@ -32,8 +34,11 @@ interface AttackResult {
 }
 
 interface RoundResult {
-  hero_attack: AttackResult;
+  hero_attack: AttackResult | null;
   monster_attack: AttackResult | null;
+  hero_initiative: number;
+  monster_initiative: number;
+  first_attacker_name: string;
   fight_over: boolean;
   winner_name: string | null;
   ai_context_string: string;
@@ -54,15 +59,25 @@ function formatAxiosDetail(error: unknown): string | null {
 }
 
 function formatAttackLine(attack: AttackResult): string {
-  const hitLabel = attack.is_hit ? 'Hit' : 'Miss';
+  const hitLabel = attack.is_fumble
+    ? 'Fumble'
+    : attack.is_hit
+      ? 'Hit'
+      : 'Miss';
   const critLabel = attack.is_critical ? ' · CRIT' : '';
   return `${attack.attacker_name} [${attack.weapon_name} d${attack.weapon_die}] → ${attack.defender_name}: d20 ${attack.roll} (+${attack.modifier}) = ${attack.total_attack} · ${hitLabel}${critLabel} · ${attack.damage_dealt} dmg · ${attack.defender_name} at ${attack.defender_remaining_hp} HP`;
 }
 
 function roundMechanics(round: RoundResult): string[] {
-  const lines = [formatAttackLine(round.hero_attack)];
-  if (round.monster_attack) {
+  const lines: string[] = [
+    `Initiative: ${round.first_attacker_name} acts first (${round.hero_initiative} vs ${round.monster_initiative})`,
+  ];
+  if (round.monster_attack && round.first_attacker_name === round.monster_attack.attacker_name) {
     lines.push(formatAttackLine(round.monster_attack));
+    if (round.hero_attack) lines.push(formatAttackLine(round.hero_attack));
+  } else {
+    if (round.hero_attack) lines.push(formatAttackLine(round.hero_attack));
+    if (round.monster_attack) lines.push(formatAttackLine(round.monster_attack));
   }
   return lines;
 }
@@ -108,6 +123,19 @@ export default function Home() {
       return [];
     }
   }, []);
+
+  const handleCharacterCreated = useCallback(async () => {
+    const data = await fetchCharacters();
+    if (data.length === 0) return;
+    setFighterAId((prev) => {
+      if (prev != null && data.some((c) => c.id === prev)) return prev;
+      return pickDefaultFighters(data).a;
+    });
+    setFighterBId((prev) => {
+      if (prev != null && data.some((c) => c.id === prev)) return prev;
+      return pickDefaultFighters(data).b;
+    });
+  }, [fetchCharacters]);
 
   useEffect(() => {
     void fetchCharacters().then((data) => {
@@ -250,6 +278,8 @@ export default function Home() {
         <h1 className="text-4xl font-bold text-red-500 tracking-widest uppercase">
           Arena
         </h1>
+
+        <CharacterCreator onCreated={handleCharacterCreated} disabled={busy} />
 
         {characters.length >= 2 && (
           <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">

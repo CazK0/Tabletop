@@ -1,13 +1,23 @@
-from langchain_ollama import OllamaLLM
+import os
+
 from langchain_core.prompts import PromptTemplate
+from langchain_ollama import OllamaLLM
 from pydantic import BaseModel
+
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")
+
 
 class NarrationRequest(BaseModel):
     context: str
 
+
 class DungeonMaster:
     def __init__(self):
-        self.llm = OllamaLLM(model="llama3")
+        llm_kwargs: dict[str, str] = {"model": OLLAMA_MODEL}
+        if OLLAMA_BASE_URL:
+            llm_kwargs["base_url"] = OLLAMA_BASE_URL
+        self.llm = OllamaLLM(**llm_kwargs)
         self.template = PromptTemplate(
             input_variables=["combat_context"],
             template=(
@@ -15,7 +25,7 @@ class DungeonMaster:
                 "event in 2-3 vivid sentences. Do not use numbers.\n\n"
                 "Context: {combat_context}\n\n"
                 "Narration:"
-            )
+            ),
         )
         self.chain = self.template | self.llm
 
