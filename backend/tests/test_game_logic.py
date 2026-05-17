@@ -26,6 +26,29 @@ def test_calculate_ac():
     assert CombatEngine.calculate_ac(14) == 12
 
 
+def test_calculate_ac_with_armor():
+    ac = CombatEngine.calculate_ac(14, ["Chain Mail", "Shield"])
+    assert ac == 12 + 3 + 2
+
+
+def test_resolve_armor_stacks_distinct_pieces():
+    bonus, label = CombatEngine.resolve_armor(["Leather Armor", "Shield"])
+    assert bonus == 3
+    assert "Leather Armor" in label
+    assert "Shield" in label
+
+
+@patch("game_logic.random.randint")
+def test_armor_increases_ac_and_can_cause_miss(mock_randint):
+    mock_randint.side_effect = [12]
+    attacker = _char("Hero", 30, 10, 10)
+    defender = _char("Knight", 30, 10, 10, ["Plate Armor"])
+    result = CombatEngine.execute_attack(attacker, defender)
+    assert result.defender_ac == 10 + 5
+    assert result.is_hit is False
+    assert result.damage_dealt == 0
+
+
 def test_resolve_weapon_longsword():
     die, name = CombatEngine.resolve_weapon(["Longsword"])
     assert die == 10

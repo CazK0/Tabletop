@@ -12,6 +12,16 @@ WEAPON_DICE: dict[str, int] = {
     "spear": 8,
 }
 
+ARMOR_BONUS: dict[str, int] = {
+    "padded armor": 1,
+    "leather armor": 1,
+    "hide armor": 2,
+    "chain mail": 3,
+    "scale mail": 4,
+    "plate armor": 5,
+    "shield": 2,
+}
+
 
 class AttackResult(BaseModel):
     attacker_name: str
@@ -27,6 +37,8 @@ class AttackResult(BaseModel):
     is_fatal: bool
     weapon_name: str
     weapon_die: int
+    defender_ac: int
+    defender_armor: str
     ai_context_string: str
 
 
@@ -47,8 +59,26 @@ class CombatEngine:
         return (stat - 10) // 2
 
     @staticmethod
-    def calculate_ac(dexterity: int) -> int:
-        return 10 + CombatEngine.calculate_modifier(dexterity)
+    def resolve_armor(inventory: list[str]) -> tuple[int, str]:
+        total = 0
+        pieces: list[str] = []
+        seen: set[str] = set()
+        for item in inventory:
+            key = item.strip().lower()
+            if key in ARMOR_BONUS and key not in seen:
+                seen.add(key)
+                total += ARMOR_BONUS[key]
+                pieces.append(item)
+        label = ", ".join(pieces) if pieces else "Unarmored"
+        return total, label
+
+    @staticmethod
+    def calculate_ac(dexterity: int, inventory: list[str] | None = None) -> int:
+        base = 10 + CombatEngine.calculate_modifier(dexterity)
+        if not inventory:
+            return base
+        armor_bonus, _ = CombatEngine.resolve_armor(inventory)
+        return base + armor_bonus
 
     @staticmethod
     def resolve_weapon(inventory: list[str]) -> tuple[int, str]:
@@ -68,7 +98,8 @@ class CombatEngine:
         d20_roll = random.randint(1, 20)
         str_mod = CombatEngine.calculate_modifier(attacker.strength)
         total_attack = d20_roll + str_mod
-        defender_ac = CombatEngine.calculate_ac(defender.dexterity)
+        _, armor_label = CombatEngine.resolve_armor(defender.inventory)
+        defender_ac = CombatEngine.calculate_ac(defender.dexterity, defender.inventory)
 
         is_critical = d20_roll == 20
         is_fumble = d20_roll == 1
@@ -96,7 +127,8 @@ class CombatEngine:
         else:
             hit_word = "Miss"
         context = (
-            f"{attacker.name} with {weapon_name} rolled {d20_roll} (+{str_mod}). "
+            f"{attacker.name} with {weapon_name} rolled {d20_roll} (+{str_mod}) vs "
+            f"{defender.name} AC {defender_ac} ({armor_label}). "
             f"{hit_word}. Dealt {damage} damage."
         )
 
@@ -114,6 +146,8 @@ class CombatEngine:
             is_fatal=is_fatal,
             weapon_name=weapon_name,
             weapon_die=weapon_die,
+            defender_ac=defender_ac,
+            defender_armor=armor_label,
             ai_context_string=context,
         )
 

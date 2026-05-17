@@ -31,6 +31,8 @@ interface AttackResult {
   is_fatal: boolean;
   weapon_name: string;
   weapon_die: number;
+  defender_ac: number;
+  defender_armor: string;
 }
 
 interface RoundResult {
@@ -65,7 +67,7 @@ function formatAttackLine(attack: AttackResult): string {
       ? 'Hit'
       : 'Miss';
   const critLabel = attack.is_critical ? ' · CRIT' : '';
-  return `${attack.attacker_name} [${attack.weapon_name} d${attack.weapon_die}] → ${attack.defender_name}: d20 ${attack.roll} (+${attack.modifier}) = ${attack.total_attack} · ${hitLabel}${critLabel} · ${attack.damage_dealt} dmg · ${attack.defender_name} at ${attack.defender_remaining_hp} HP`;
+  return `${attack.attacker_name} [${attack.weapon_name} d${attack.weapon_die}] → ${attack.defender_name} [${attack.defender_armor} AC ${attack.defender_ac}]: d20 ${attack.roll} (+${attack.modifier}) = ${attack.total_attack} · ${hitLabel}${critLabel} · ${attack.damage_dealt} dmg · ${attack.defender_remaining_hp} HP`;
 }
 
 function roundMechanics(round: RoundResult): string[] {

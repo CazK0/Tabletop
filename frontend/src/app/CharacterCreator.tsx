@@ -15,6 +15,17 @@ const WEAPONS = [
   'Spear',
 ] as const;
 
+const ARMORS = [
+  'None',
+  'Padded Armor',
+  'Leather Armor',
+  'Hide Armor',
+  'Chain Mail',
+  'Scale Mail',
+  'Plate Armor',
+  'Shield',
+] as const;
+
 interface CharacterCreatorProps {
   onCreated: () => void;
   disabled?: boolean;
@@ -29,6 +40,7 @@ export default function CharacterCreator({
   const [strength, setStrength] = useState(12);
   const [dexterity, setDexterity] = useState(12);
   const [weapon, setWeapon] = useState<string>(WEAPONS[0]);
+  const [armor, setArmor] = useState<string>(ARMORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -43,6 +55,10 @@ export default function CharacterCreator({
     setError('');
 
     try {
+      const inventory = [weapon];
+      if (armor !== 'None') {
+        inventory.push(armor);
+      }
       await axios.post(`${API_BASE}/characters/`, {
         name: name.trim(),
         level: 1,
@@ -50,7 +66,7 @@ export default function CharacterCreator({
         max_hp: maxHp,
         strength,
         dexterity,
-        inventory: [weapon],
+        inventory,
         is_alive: true,
       });
       setName('');
@@ -58,6 +74,7 @@ export default function CharacterCreator({
       setStrength(12);
       setDexterity(12);
       setWeapon(WEAPONS[0]);
+      setArmor(ARMORS[0]);
       onCreated();
     } catch {
       setError('Could not create character.');
@@ -111,6 +128,21 @@ export default function CharacterCreator({
             {WEAPONS.map((w) => (
               <option key={w} value={w}>
                 {w}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-neutral-500">Armor</span>
+          <select
+            value={armor}
+            disabled={disabled || submitting}
+            onChange={(e) => setArmor(e.target.value)}
+            className={inputClass}
+          >
+            {ARMORS.map((a) => (
+              <option key={a} value={a}>
+                {a}
               </option>
             ))}
           </select>
