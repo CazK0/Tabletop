@@ -3,6 +3,7 @@
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import CharacterCreator from './CharacterCreator';
+import CharacterRoster from './CharacterRoster';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -126,9 +127,12 @@ export default function Home() {
     }
   }, []);
 
-  const handleCharacterCreated = useCallback(async () => {
-    const data = await fetchCharacters();
-    if (data.length === 0) return;
+  const applyFighterDefaults = useCallback((data: Character[]) => {
+    if (data.length === 0) {
+      setFighterAId(null);
+      setFighterBId(null);
+      return;
+    }
     setFighterAId((prev) => {
       if (prev != null && data.some((c) => c.id === prev)) return prev;
       return pickDefaultFighters(data).a;
@@ -137,7 +141,27 @@ export default function Home() {
       if (prev != null && data.some((c) => c.id === prev)) return prev;
       return pickDefaultFighters(data).b;
     });
-  }, [fetchCharacters]);
+  }, []);
+
+  const handleCharacterCreated = useCallback(async () => {
+    const data = await fetchCharacters();
+    applyFighterDefaults(data);
+  }, [fetchCharacters, applyFighterDefaults]);
+
+  const handleCharacterDeleted = useCallback(
+    (deletedId: number) => {
+      setFighterAId((prev) => (prev === deletedId ? null : prev));
+      setFighterBId((prev) => (prev === deletedId ? null : prev));
+      if (fighterAId === deletedId || fighterBId === deletedId) {
+        setFightStarted(false);
+        setFightOver(false);
+        setCombatLog([]);
+        setLatestNarration('');
+        setWinnerName(null);
+      }
+    },
+    [fighterAId, fighterBId],
+  );
 
   useEffect(() => {
     void fetchCharacters().then((data) => {
@@ -282,6 +306,14 @@ export default function Home() {
         </h1>
 
         <CharacterCreator onCreated={handleCharacterCreated} disabled={busy} />
+
+        <CharacterRoster
+          characters={characters}
+          disabled={busy}
+          lockEdits={fightStarted && !fightOver}
+          onChanged={handleCharacterCreated}
+          onDeleted={handleCharacterDeleted}
+        />
 
         {characters.length >= 2 && (
           <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
